@@ -11,6 +11,14 @@ from pymu.client import Client
 from pymu.pmuDataFrame import DataFrame
 from pymu.pmuLib import *
 import pymu.tools as tools
+import matplotlib
+import numpy as np
+import matplotlib.pyplot as plt
+
+import datetime as dt
+import matplotlib.animation as animation
+from matplotlib.lines import Line2D
+import math 
 
 CSV_DIR = "./data"
 
@@ -28,7 +36,7 @@ def csvPrint(dFrame, csv_handle):
         if i != (len(dFrame.pmus) - 1):
             strOut += ","
     strOut += "\n"
-
+    print(strOut)
     csv_handle.write(strOut)
 
 def getNextIndex(originalPath):
@@ -76,9 +84,54 @@ def createCsvFile(confFrame):
 
     return csv_handle 
 
+# Create figure for plotting
+# Format plot
+
+plt.title('VA angle over time')
+plt.ylabel('Time')
+fig1, ax1 = plt.subplots()
+
+xs = [(dt.datetime.now()-dt.datetime.utcfromtimestamp(0)).total_seconds()]
+ys = [0]
+
+line = Line2D(xs,ys)
+ax1.add_line(line)
+ax1.set_ylim(-math.pi, math.pi)
+ax1.set_xlim(xs[0], 2)
+
+# This function is called periodically from FuncAnimation
+def animate(i,dataRcvr,confFrame):
+
+    global xs,ys
+    global  fig1,ax1,line
+    
+    d = tools.getDataSample(dataRcvr,True)
+    if d == '':
+                return
+    dFrame = DataFrame(d, confFrame) # Create dataFrame
+    
+    xs.append(dFrame.soc.utcSec)
+   
+    ys.append(dFrame.pmus[0].phasors[3].rad)
+    lastt = xs[-1]
+    if lastt >= xs[0] + 2.0:  # reset the arrays
+            xs = [xs[-1]]
+            ys = [ys[-1]]
+            ax1.set_xlim(xs[0], xs[0] + 2.0)
+            ax1.figure.canvas.draw()
+    
+    # Add x and y to lists
+    
+    print("Sec: {}".format(dFrame.soc.utcSec))
+    print("Phasor: {}".format(dFrame.pmus[0].phasors[0].rad))
+    line.set_data(xs, ys)
+
+    return line,
+
+
 def runPmuToCsv(ip, tcpPort, frameId, udpPort, index=-1, printInfo = True):
     global RUNNING
-
+    global xs, ys
     print("#{}# Creating Connection\n\t{:<10} {}\n\t{:<10} {}\n\t{:<10} {}".format(index, "IP:", ip, "Port:", tcpPort, "ID Code:", frameId))
 
     if udpPort > -1:
@@ -109,20 +162,102 @@ def runPmuToCsv(ip, tcpPort, frameId, udpPort, index=-1, printInfo = True):
         dataRcvr = Server(udpPort, "UDP")
 
     dataRcvr.setTimeout(10)
+    configFrame = None
 
+   
+
+    # force square figure and square axes looks better for polar, IMO
+   
+    # make a square figure
+    fig, axs = plt.subplots(1, 2,subplot_kw={'projection': 'polar'})
+   
+
+ 
+   # ax.plot(theta, r, color='#ee8d18', lw=3)
+    
+    plt.grid(True)
+
+    axs[0].set_title("Voltage Phasors", fontsize=20)
+    axs[1].set_title("Current Phasors", fontsize=20)
+  
+    
+    while configFrame == None:
+        tools.requestConfigFrame2(dataRcvr, frameId)
+        configFrame = tools.readConfigFrame2(dataRcvr, True)
+
+
+    
+    tools.turnDataOn(dataRcvr, frameId)
     print("#{}# Starting data collection...\n".format(index))# if printInfo else None
     p = 0
     milliStart = int(round(time.time() * 1000))
+    
     while RUNNING:
         try:
-            d = tools.getDataSample(dataRcvr)
+            d = tools.getDataSample(dataRcvr,True)
             if d == '':
                 break
             dFrame = DataFrame(d, confFrame) # Create dataFrame
-            csvPrint(dFrame, csv_handle)
+           #csvPrint(dFrame, csv_handle)
+           #This is the line I added:
+            VA = axs[0].arrow(0.0, 0.0, dFrame.pmus[0].phasors[0].rad, dFrame.pmus[0].phasors[0].mag, alpha = 0.5, width = 0.015,
+                    edgecolor = 'red', facecolor = 'red', lw = 2, zorder = 5)
+
+            # arrow at 45 degree
+            VB = axs[0].arrow(0.0,0.0, dFrame.pmus[0].phasors[1].rad, dFrame.pmus[0].phasors[1].mag, alpha = 0.5, width = 0.015,
+                    edgecolor = 'blue', facecolor = 'blue', lw = 2, zorder = 5)
+            VC = axs[0].arrow(0.0,0.0, dFrame.pmus[0].phasors[2].rad, dFrame.pmus[0].phasors[2].mag, alpha = 0.5, width = 0.015,
+                    edgecolor = 'green', facecolor = 'green', lw = 2, zorder = 5)
+            
+
+            IA = axs[1].arrow(0.0, 0.0, dFrame.pmus[0].phasors[3].rad, dFrame.pmus[0].phasors[3].mag, alpha = 0.5, width = 0.015,
+                    edgecolor = 'red', facecolor = 'red', lw = 2, zorder = 5)
+
+            # arrow at 45 degree
+            IB = axs[1].arrow(0.0,0.0, dFrame.pmus[0].phasors[4].rad, dFrame.pmus[0].phasors[4].mag, alpha = 0.5, width = 0.015,
+                    edgecolor = 'blue', facecolor = 'blue', lw = 2, zorder = 5)
+            IC = axs[1].arrow(0.0,0.0, dFrame.pmus[0].phasors[5].rad, dFrame.pmus[0].phasors[5].mag, alpha = 0.5, width = 0.015,
+                    edgecolor = 'green', facecolor = 'green', lw = 2, zorder = 5)
+            
+            
+            # xs.append(dFrame.soc.utcSec)
+   
+            # ys.append(dFrame.pmus[0].phasors[0].rad)
+            
+           # animate(1, xs, ys,dFrame)
+            
+    #         lastt = xs[-1]
+    #         if lastt >= xs[0] + 0.02:  # reset the arrays
+    #             xs = [xs[-1]]
+    #             ys = [ys[-1]]
+    #             ax1.set_xlim(xs[0], xs[0] + 2.0)
+    #             ax1.figure.canvas.draw()
+    
+    # # Add x and y to lists
+    #         xs.append(dFrame.soc.utcSec)
+   
+    #         ys.append(dFrame.pmus[0].phasors[0].rad)
+    #         print("Sec: {}".format(dFrame.soc.utcSec))
+    #         print("Phasor: {}".format(dFrame.pmus[0].phasors[0].rad))
+    #         line.set_data(xs, ys)
+            
+            
+            
+
+            
+            
             if p == 0:
                 print("Data Collection Started...")
+                # Set up plot to call animate() function periodically
+                ani = animation.FuncAnimation(fig1, animate, fargs=(dataRcvr,confFrame), interval=200, blit=True, save_count=100)
+                plt.show()
             p += 1
+
+            
+           
+           # plt1.show()
+            
+            
         except KeyboardInterrupt:
             break
             RUNNING = False
