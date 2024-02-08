@@ -150,6 +150,7 @@ class PMU:
         self.digitals = [None]*self.numOfDgtl
         l = 4
         totValBin = hexToBin(self.pmuHex[self.length:self.length+l], 16)
+        totValBin = totValBin[::-1]
         for i in range(0, self.numOfDgtl):
             name = self.stationFrame.channels[self.numOfPhsrs+self.numOfAnlg+i].strip()
             print("DIGITAL:", self.pmuHex[self.length:self.length+l]) if self.dbg else None
